@@ -1,1 +1,128 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>منظومة السيرة والمواظبة</title><script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script><style>body{margin:0;font-family:Tahoma,Arial;background:#f8fafc}#m{padding:25px;text-align:center;font-weight:bold}iframe{border:0;width:100vw;height:100vh;display:block}</style></head><body><div id="m">جاري فتح التطبيق...</div><script>async function run(){try{let r=await fetch('https://api.github.com/repos/princejour/sira-firebase-test-apk/git/trees/main?recursive=1');let j=await r.json();let z=(j.tree||[]).filter(x=>/\.zip$/i.test(x.path)).sort((a,b)=>a.path.localeCompare(b.path,undefined,{numeric:true})).pop();if(!z)throw Error('لا يوجد ZIP في مستودع التطبيق');let u='https://raw.githubusercontent.com/princejour/sira-firebase-test-apk/main/'+z.path.split('/').map(encodeURIComponent).join('/');let b=await (await fetch(u)).arrayBuffer();let zip=await JSZip.loadAsync(b);let n=Object.keys(zip.files).find(p=>/app\/src\/main\/assets\/index\.html$/i.test(p))||Object.keys(zip.files).find(p=>/(^|\/)index\.html$/i.test(p));let h=await zip.files[n].async('string');let f=document.createElement('iframe');document.body.innerHTML='';document.body.appendChild(f);f.srcdoc=h}catch(e){document.getElementById('m').textContent='خطأ: '+e.message}}run()</script></body></html>
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>منظومة السيرة والمواظبة</title>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <style>
+    body{margin:0;font-family:Tahoma,Arial;background:#f8fafc}
+    #m{padding:25px;text-align:center;font-weight:bold;color:#0f172a}
+    iframe{border:0;width:100vw;height:100vh;display:block}
+  </style>
+</head>
+<body>
+  <div id="m">جاري فتح التطبيق...</div>
+  <script>
+    const EMPTY_LISTS_VERSION = 'empty-external-import-v1';
+
+    function escapeRegExp(value){
+      return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function replaceNamedStudentArrays(html){
+      const names = [
+        'SAMPLE_STUDENTS','DEFAULT_STUDENTS','DEMO_STUDENTS','INITIAL_STUDENTS',
+        'sampleStudents','defaultStudents','demoStudents','initialStudents',
+        'studentsData','studentData','studentsList','studentList',
+        'sampleStudentsData','defaultStudentsData','demoStudentsData',
+        'talamidh','defaultTalamidh','sampleTalamidh','eleves','defaultEleves',
+        'pupils','defaultPupils','roster','defaultRoster','sampleRoster'
+      ];
+
+      for(const name of names){
+        const safe = escapeRegExp(name);
+        html = html.replace(
+          new RegExp('(const|let|var)\\s+' + safe + '\\s*=\\s*\\[[\\s\\S]*?\\]\\s*;', 'g'),
+          '$1 ' + name + ' = [];'
+        );
+        html = html.replace(
+          new RegExp('window\\.' + safe + '\\s*=\\s*\\[[\\s\\S]*?\\]\\s*;', 'g'),
+          'window.' + name + ' = [];'
+        );
+      }
+      return html;
+    }
+
+    function patchInnerApp(html){
+      html = replaceNamedStudentArrays(html);
+
+      const preload = `
+<script>
+(function(){
+  var stamp='${EMPTY_LISTS_VERSION}';
+  var studentKeyPattern=/(student|students|pupil|pupils|eleve|eleves|talam|talamidh|roster|تلميذ|تلاميذ|قائمة|قوائم)/i;
+
+  try{
+    if(localStorage.getItem('__sira_empty_lists_version__')!==stamp){
+      Object.keys(localStorage).forEach(function(k){
+        if(studentKeyPattern.test(k)) localStorage.removeItem(k);
+      });
+      localStorage.setItem('__sira_empty_lists_version__', stamp);
+    }
+    window.__SIRA_FORCE_EMPTY_STUDENT_LISTS__ = true;
+  }catch(e){}
+
+  var originalSetItem = Storage.prototype.setItem;
+  Storage.prototype.setItem = function(key, value){
+    try{
+      if(window.__SIRA_FORCE_EMPTY_STUDENT_LISTS__ && studentKeyPattern.test(String(key))){
+        var text = String(value || '');
+        var looksLikeDemoList = /أحمد|محمد|سعود|فيصل|الحربي|الدوسري|الصف العاشر|demo|sample|default/i.test(text);
+        if(looksLikeDemoList){
+          return originalSetItem.call(this, key, '[]');
+        }
+      }
+    }catch(e){}
+    return originalSetItem.apply(this, arguments);
+  };
+})();
+<\/script>
+      `;
+
+      if(/<head[^>]*>/i.test(html)){
+        html = html.replace(/<head[^>]*>/i, function(match){ return match + preload; });
+      }else{
+        html = preload + html;
+      }
+
+      return html;
+    }
+
+    async function run(){
+      try{
+        const treeResponse = await fetch('https://api.github.com/repos/princejour/sira-firebase-test-apk/git/trees/main?recursive=1');
+        const treeJson = await treeResponse.json();
+        const zipItem = (treeJson.tree || [])
+          .filter(x => /\.zip$/i.test(x.path))
+          .sort((a,b) => a.path.localeCompare(b.path, undefined, {numeric:true}))
+          .pop();
+
+        if(!zipItem) throw Error('لا يوجد ZIP في مستودع التطبيق');
+
+        const zipUrl = 'https://raw.githubusercontent.com/princejour/sira-firebase-test-apk/main/' +
+          zipItem.path.split('/').map(encodeURIComponent).join('/');
+
+        const zipBytes = await (await fetch(zipUrl)).arrayBuffer();
+        const zip = await JSZip.loadAsync(zipBytes);
+        const indexPath = Object.keys(zip.files).find(p => /app\/src\/main\/assets\/index\.html$/i.test(p)) ||
+          Object.keys(zip.files).find(p => /(^|\/)index\.html$/i.test(p));
+
+        if(!indexPath) throw Error('لم يتم العثور على index.html داخل ZIP');
+
+        let html = await zip.files[indexPath].async('string');
+        html = patchInnerApp(html);
+
+        const frame = document.createElement('iframe');
+        document.body.innerHTML = '';
+        document.body.appendChild(frame);
+        frame.srcdoc = html;
+      }catch(e){
+        document.getElementById('m').textContent = 'خطأ: ' + e.message;
+      }
+    }
+
+    run();
+  </script>
+</body>
+</html>
